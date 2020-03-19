@@ -60,14 +60,7 @@ class ImageRegistration:
             self.img_map[key].append(full_path)
 
     def sample_and_move_files(self, num_samples=10):
-        '''
-        TODO
-            - FIX VARIABLE NAMES TO CLASS STRUCTURE (DONE - PRELIM REVIEW PASSED)
-            - CODE SAMPLING METHOD (DONE - PRELIM REVIEW PASSED)
-            - CODE MATCHING METHOD TO CHECK IF THERMAL FILE EXISTS FOR SAMPLED RGB FILE (DONE - PRELIM REVIEW PASSED)
-            - ALTER COPY FUNCTION BELOW (DONE - PRELIM REVIEW PASSED)
-            - ADD AUTOMATIC FILE CLEANUP IF FILE EXISTS
-        '''
+
         for key in self.img_map.keys():
             # Make folders to move sampled iamges of each size for both thermal and rgb
             full_path_rgb = (os.path.join(self.rgb_dir, key))
@@ -112,6 +105,7 @@ class ImageRegistration:
                 sampled_file_list.append((rgb_path, thermal_path))
 
             print (sampled_file_list)
+
             #Move sampled files to respective sorted folder
             for file in sampled_file_list:
                 rgb_file = file[0]
