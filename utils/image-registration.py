@@ -72,6 +72,13 @@ class ImageRegistration:
             # Make folders to move sampled iamges of each size for both thermal and rgb
             full_path_rgb = (os.path.join(self.rgb_dir, key))
             full_path_thermal = (os.path.join(self.thermal_dir, key))
+
+            #Removes directories if they already exist
+            if (os.path.isdir(full_path_rgb)):
+                shutil.rmtree(full_path_rgb)
+            if (os.path.isdir(full_path_thermal)):
+                shutil.rmtree(full_path_thermal)
+                
             os.mkdir(full_path_rgb)
             os.mkdir(full_path_thermal)
 
