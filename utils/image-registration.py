@@ -4,6 +4,7 @@ from collections import defaultdict
 import shutil
 import argparse
 import matlab.engine
+import glob
 
 class ImageRegistration:
     """
@@ -34,7 +35,7 @@ class ImageRegistration:
         Also moves the respective thermal file for each sampled rgb file.
 
     """
-    def __init__(self, root_dir, rgb_dir, thermal_dir):
+    def __init__(self, rgb_dir, thermal_dir):
         if os.path.isdir(rgb_dir):
             self.rgb_dir = rgb_dir
         else:
@@ -58,33 +59,79 @@ class ImageRegistration:
             key = str(width) + "_" + str(height)
             self.img_map[key].append(full_path)
 
-    def sample_and_move_files(self):
+    def sample_and_move_files(self, num_samples=10):
         '''
         TODO
-            - FIX VARIABLE NAMES TO CLASS STRUCTURE
-            - CODE SAMPLING METHOD
-            - CODE MATCHING METHOD TO CHECK IF THERMAL FILE EXISTS FOR SAMPLED RGB FILE
-            - ALTER COPY FUNCTION BELOW
+            - FIX VARIABLE NAMES TO CLASS STRUCTURE (DONE) (IN-REVIEW)
+            - CODE SAMPLING METHOD (DONE) (IN-REVIEW)
+            - CODE MATCHING METHOD TO CHECK IF THERMAL FILE EXISTS FOR SAMPLED RGB FILE (DONE) (IN-REVIEW)
+            - ALTER COPY FUNCTION BELOW (DONE) (IN-REVIEW)
         '''
         for key in self.img_map.keys():
-            full_path = (os.path.join(self.rgb_dir, key))
-            os.mkdir(full_path)
-            for file in self.img_map[key]:
-                file_only = os.path.basename(file)
-                source_file_path = (os.path.join(self.rgb, file))
-                dest_file_path = os.path.join(full_path, file_only)
+            # Make folders to move sampled iamges of each size for both thermal and rgb
+            full_path_rgb = (os.path.join(self.rgb_dir, key))
+            full_path_thermal = (os.path.join(self.thermal_dir, key))
+            os.mkdir(full_path_rgb)
+            os.mkdir(full_path_thermal)
 
-                shutil.copyfile(source_file_path, dest_file_path)
+            #Sample files for image size
+
+            def check_matching_thermal_file(rgb_file):
+                base_file = os.path.basename(rgb_file)
+                rgb_file_path = os.path.join(self.rgb_dir, base_file)
+                thermal_file_path = os.path.join(self.thermal_dir, base_file)
+
+                rgb_file_path = rgb_file_path.split(".")[0] + ".*"
+                thermal_file_path = thermal_file_path.split(".")[0] + ".*"
+
+                if glob.glob(rgb_file_path) and glob.glob(thermal_file_path):
+                    return (True, rgb_file_path, thermal_file_path)
+                else:
+                    return (False, rgb_file_path, thermal_file_path)
+
+            sampled_file_list = []
+
+            for x in range(0,num_samples):
+                sample = random.sample(self.img_map[key], 1)
+                matching, rgb_path, thermal_path = check_matching_thermal_file(sample)
+                while (not matching):
+                    sample = random.sample(self.img_map[key,1])
+                    matching, rgb_path, thermal_path = check_matching_thermal_file(sample)
+
+                sampled_file_list.append((rgb_path, thermal_path))
+
+            #Move sampled files to respective sorted folder
+            for file in sampled_file_list:
+                rgb_file = file[0]
+                thermal_file = file[1]
+
+                rgb_file_only = os.path.basename(rgb_file)
+                thermal_file_only = os.path.basename(thermal_file)
+
+                source_file_path_rgb= os.path.join(self.rgb_dir, rgb_file_only)
+                source_file_path_thermal = os.path.join(self.thermal_dir, thermal_file_only)
+
+                dest_file_path_rgb = os.path.join(full_path_rgb, rgb_file_only)
+                dest_file_path_thermal = os.path.join(full_path_thermal, thermal_file_only)
+
+                shutil.copyfile(source_file_path_rgb, dest_file_path_rgb)
+                shutil.copyfile(source_file_path_thermal, dest_file_path_thermal)
+
+
+
 
 
 
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("img_dir")
+parser.add_argument("rgb_dir")
+parser.add_argument("thermal_dir")
 args = parser.parse_args()
 
-arrange_files_by_image_size(args.img_dir)
+image_registration = ImageRegistration(rgb_dir=args.rgb_dir, thermal_dir=args.thermal_dir)
+image_registration.arrange_files_by_image_size()
+image_registration.sample_and_move_files()
 
 
 
