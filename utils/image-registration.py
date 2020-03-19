@@ -3,8 +3,8 @@ from PIL import Image
 from collections import defaultdict
 import shutil
 import argparse
-import matlab.engine
 import glob
+import random
 
 class ImageRegistration:
     """
@@ -62,10 +62,11 @@ class ImageRegistration:
     def sample_and_move_files(self, num_samples=10):
         '''
         TODO
-            - FIX VARIABLE NAMES TO CLASS STRUCTURE (DONE) (IN-REVIEW)
-            - CODE SAMPLING METHOD (DONE) (IN-REVIEW)
-            - CODE MATCHING METHOD TO CHECK IF THERMAL FILE EXISTS FOR SAMPLED RGB FILE (DONE) (IN-REVIEW)
-            - ALTER COPY FUNCTION BELOW (DONE) (IN-REVIEW)
+            - FIX VARIABLE NAMES TO CLASS STRUCTURE (DONE - PRELIM REVIEW PASSED)
+            - CODE SAMPLING METHOD (DONE - PRELIM REVIEW PASSED)
+            - CODE MATCHING METHOD TO CHECK IF THERMAL FILE EXISTS FOR SAMPLED RGB FILE (DONE - PRELIM REVIEW PASSED)
+            - ALTER COPY FUNCTION BELOW (DONE - PRELIM REVIEW PASSED)
+            - ADD AUTOMATIC FILE CLEANUP IF FILE EXISTS
         '''
         for key in self.img_map.keys():
             # Make folders to move sampled iamges of each size for both thermal and rgb
@@ -84,7 +85,10 @@ class ImageRegistration:
                 rgb_file_path = rgb_file_path.split(".")[0] + ".*"
                 thermal_file_path = thermal_file_path.split(".")[0] + ".*"
 
-                if glob.glob(rgb_file_path) and glob.glob(thermal_file_path):
+                rgb_file_path = glob.glob(rgb_file_path)[0]
+                thermal_file_path = glob.glob(thermal_file_path)[0]
+
+                if rgb_file_path and thermal_file_path:
                     return (True, rgb_file_path, thermal_file_path)
                 else:
                     return (False, rgb_file_path, thermal_file_path)
@@ -92,14 +96,15 @@ class ImageRegistration:
             sampled_file_list = []
 
             for x in range(0,num_samples):
-                sample = random.sample(self.img_map[key], 1)
+                sample = random.choice(self.img_map[key])
                 matching, rgb_path, thermal_path = check_matching_thermal_file(sample)
                 while (not matching):
-                    sample = random.sample(self.img_map[key,1])
+                    sample = random.choice(self.img_map[key])
                     matching, rgb_path, thermal_path = check_matching_thermal_file(sample)
 
                 sampled_file_list.append((rgb_path, thermal_path))
 
+            print (sampled_file_list)
             #Move sampled files to respective sorted folder
             for file in sampled_file_list:
                 rgb_file = file[0]
@@ -125,8 +130,8 @@ class ImageRegistration:
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("rgb_dir")
-parser.add_argument("thermal_dir")
+parser.add_argument("--rgb_dir")
+parser.add_argument("--thermal_dir")
 args = parser.parse_args()
 
 image_registration = ImageRegistration(rgb_dir=args.rgb_dir, thermal_dir=args.thermal_dir)
