@@ -48,3 +48,4 @@ The annotation files labels are corrected (pedestrians, bikes, cars)
 #TODO 
     - Add label file generation for different models (SSD, Faster R-CNN, etc).  
     - Automatically download the files from the dropbox 
+
