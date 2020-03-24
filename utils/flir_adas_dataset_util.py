@@ -6,7 +6,7 @@ from PIL import Image
 import numpy as np
 
 class FLIR_ADAS:
-    def __init__(self):
+    def __init__(self, root_dir):
         self.root_dir = root_dir
         self.train_dir = os.path.join(root_dir, "train")
         self.val_dir = os.path.join(root_dir, "val")
@@ -57,7 +57,7 @@ class FLIR_ADAS:
         def change_flir(dir_path):
             for file in os.listdir(dir_path):
                 new_file = file.split(".")
-                new_file[0] = str(int(new_file[0].split("-")[1])-1)
+                new_file[0] = str(int(new_file[0].split("_")[1])-1)
                 new_file = new_file[0] + "." + new_file[1]
                 full_old_file = os.path.join(dir_path, file)
                 full_new_file = os.path.join(dir_path, new_file)
@@ -70,8 +70,9 @@ class FLIR_ADAS:
 
     def remove_wrong_sizes(self):
         print("Copying files into new directories...", end='')
+        print (self.train_thermal_dir_adjusted)
         def copy_files(old_dir, new_dir):
-            for file in old_dir:
+            for file in os.listdir(old_dir):
                 old_path = os.path.join(old_dir, file)
                 new_path = os.path.join(new_dir, file)
                 shutil.copy(old_path, new_path)
@@ -86,27 +87,38 @@ class FLIR_ADAS:
         def remove_files(rgb_dir, thermal_dir):
             for file in os.listdir(rgb_dir):
                 full_path_rgb = os.path.join(rgb_dir, file)
-                full_path_thermal = os.path.join(thermal_dir, file)
+                full_path_thermal = os.path.join(thermal_dir, file).split(".")[0] +".jpeg"
                 if not os.path.isfile(full_path_rgb):
                     continue
-                image = Image.open(full_path_rgb)
-                width, height = image.size
+                width = 0
+                height = 0
+                with Image.open(full_path_rgb) as im:
+                    width, height = im.size
+                print (width, height)
                 if width != 1800 or height != 1600:
-                    os.remove(full_path_rgb)
-                    os.remove(full_path_thermal)
+                    try:
+                        os.remove(full_path_rgb)
+                    except:
+                        print("Could not remove: ", full_path_rgb)
+                    try:
+                        os.remove(full_path_thermal)
+                    except:
+                        print("Could not remove: ", full_path_thermal)
         remove_files(self.train_rgb_dir_adjusted, self.train_thermal_dir_adjusted)
-        remove_files(self.val_rgb_dir_adjustedm, self.val_thermal_dir_adjusted)
+        remove_files(self.val_rgb_dir_adjusted, self.val_thermal_dir_adjusted)
         print(" Done. ")
 
 
     def remove_unmatched_thermal_files(self):
         print("Removing unmatched thermal files...", end='')
         def remove_files(rgb_dir, thermal_dir):
-            for file in os.listdir(thermal_path):
-                full_path_thermal = os.path.join(thermal_path, file)
-                full_path_rgb = os.path.join(rgb_path, file)
+            for file in os.listdir(thermal_dir):
+                #print(file)
+                full_path_thermal = os.path.join(thermal_dir, file)
+                full_path_rgb = os.path.join(rgb_dir, file).split(".")[0] + ".jpg"
 
                 if not os.path.isfile(full_path_rgb):
+                    #print (full_path_thermal)
                     os.remove(full_path_thermal)
 
         remove_files(self.train_rgb_dir_adjusted, self.train_thermal_dir_adjusted)
@@ -116,7 +128,6 @@ class FLIR_ADAS:
 
     def register_images(self):
         print("Registering RGB Images...", end='')
-
         def register_image(dir):
             for file in os.listdir(dir):
                 if file.endswith(".jpg"):
@@ -139,3 +150,8 @@ class FLIR_ADAS:
 
 
 
+flir = FLIR_ADAS(root_dir="D:/FLIR")
+#flir.update_file_names()
+flir.remove_wrong_sizes()
+flir.remove_unmatched_thermal_files()
+flir.register_images()
