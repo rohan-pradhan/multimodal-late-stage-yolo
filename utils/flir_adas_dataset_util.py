@@ -4,6 +4,7 @@ import json
 import shutil
 from PIL import Image
 import numpy as np
+from collections import defaultdict
 
 class FLIR_ADAS:
     def __init__(self, root_dir):
@@ -23,11 +24,11 @@ class FLIR_ADAS:
         self.train_rgb_dir_adjusted = os.path.join(self.train_dir, "RGB_adjusted")
         self.val_rgb_dir_adjusted = os.path.join(self.val_dir, "RGB_adjusted")
 
-        os.mkdir(self.train_thermal_dir_adjusted)
-        os.mkdir(self.val_thermal_dir_adjusted)
+        #os.mkdir(self.train_thermal_dir_adjusted)
+        #os.mkdir(self.val_thermal_dir_adjusted)
 
-        os.mkdir(self.train_rgb_dir_adjusted)
-        os.mkdir(self.val_rgb_dir_adjusted)
+        #os.mkdir(self.train_rgb_dir_adjusted)
+        #os.mkdir(self.val_rgb_dir_adjusted)
 
         self.train_annotations_json_path = os.path.join(self.train_dir, "thermal_annotations.json")
         self.val_annotations_json_path = os.path.join(self.val_dir, "thermal_annotations.json")
@@ -35,8 +36,11 @@ class FLIR_ADAS:
         self.train_annotations_data = self.load_json_annotations(self.train_annotations_json_path)
         self.val_annotations_data = self.load_json_annotations(self.val_annotations_json_path)
 
-        self.train_labels_dir = os.path.join(self.train_dir, "labels")
-        self.val_labels_dir = os.path.join(self.val_dir, "labels")
+        self.train_labels_dir = os.path.join(self.train_dir, "yolo_labels")
+        self.val_labels_dir = os.path.join(self.val_dir, "yolo_labels")
+
+        os.mkdir(self.train_labels_dir)
+        os.mkdir(self.val_labels_dir)
 
         self.homography = np.array([[3.93814117e-01, -5.02045010e-03, -5.58470980e+01],
                                     [3.91106718e-03, 3.97512997e-01, -5.92255578e+01],
@@ -144,6 +148,74 @@ class FLIR_ADAS:
         register_image(self.val_rgb_dir_adjusted)
         print(" Done.")
 
+    def create_label_files(self):
+        #1 -> 0
+        #3 -> 1
+        #Delete all other numbers
+
+        def change_category_id(category_id):
+            if (category_id == 1):
+                category_id = 0
+            elif (category_id == 3):
+                category_id = 1
+            else:
+                category_id = -1
+            return category_id
+
+        def convert_bbox(bbox):
+            x_top_left = bbox[0]
+            y_top_left = bbox[1]
+            width = bbox[2]
+            height = bbox[3]
+
+            x_center = x_top_left + (width/2.0)
+            y_center = y_top_left + (height/2.0)
+            bbox = [x_center, y_center, width, height]
+
+            img_width = float(self.img_size[0])
+            img_height = float(self.img_size[1])
+
+            bbox[0] /= img_width
+            bbox[2] /= img_width
+            bbox[1] /= img_height
+            bbox[3] /= img_height
+
+            return bbox
+
+        def create_labels(data, directory):
+            annotations_list = defaultdict(list)
+            for annotation in data:
+                image_id = annotation['image_id']
+                category_id  = change_category_id(annotation['category_id'])
+                if category_id == -1:
+                    continue
+                bbox = convert_bbox(annotation['bbox'])
+                tuple_to_add = (category_id, bbox)
+                annotations_list[image_id].append(tuple_to_add)
+
+            for key in annotations_list:
+                file_name = str(key)+".txt"
+                file_path = os.path.join(directory, file_name)
+
+                with open(file_path, 'a+') as f:
+                    for tuple in annotations_list[key]:
+                        category_id = str(tuple[0])
+                        x_center = str(tuple[1][0])
+                        y_center = str(tuple[1][1])
+                        width = str(tuple[1][2])
+                        height = str(tuple[1][3])
+                        str_to_write = " ".join([category_id, x_center, y_center, width, height, "\n"])
+                        f.write(str_to_write)
+
+        create_labels(self.train_annotations_data, self.train_labels_dir)
+        create_labels(self.val_annotations_data, self.val_labels_dir)
+
+
+
+
+
+
+
 
 
 
@@ -152,6 +224,7 @@ class FLIR_ADAS:
 
 flir = FLIR_ADAS(root_dir="D:/FLIR")
 #flir.update_file_names()
-flir.remove_wrong_sizes()
-flir.remove_unmatched_thermal_files()
-flir.register_images()
+#flir.remove_wrong_sizes()
+#flir.remove_unmatched_thermal_files()
+#flir.register_images()
+flir.create_label_files()

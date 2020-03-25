@@ -43,7 +43,9 @@ The remaining RGB files are registered to the thermal files using a pre-set 8 po
 ### Create label files
 The annotation files are parsed and created into individual files in YOLO format. 
 The annotation files are then converted into the correct format (top right to center coordinates). 
-The annotation files labels are corrected (pedestrians, bikes, cars)
+The annotation files labels are corrected (pedestrians, cars)
+The annotation format 0 for person and 1 for car. 
+The bike annotations are removed. 
 
 #TODO 
     - Add label file generation for different models (SSD, Faster R-CNN, etc).  
