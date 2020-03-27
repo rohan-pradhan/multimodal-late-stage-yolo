@@ -159,7 +159,7 @@ class LoadMultimodalImagesAndLabels(Dataset):
         self.img_size = img_size
 
         # Define labels
-        self.label_files = [x.replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt')
+        self.label_files = [x.replace('thermal_8_bit_adjusted', 'yolo_labels').replace(os.path.splitext(x)[-1], '.txt')
                             for x in self.thermal_files]
 
         self.thermal_images = [None] * n
@@ -171,18 +171,12 @@ class LoadMultimodalImagesAndLabels(Dataset):
         vision_img_path = self.vision_files[index]
         label_path = self.label_files[index]
 
-        thermal_img_0 = cv2.imread(thermal_img_path)
+        thermal_img, vision_img = load_multimodal_images(index)
 
-
-        vision_img_0 = cv2.imread(vision_img_path)
-
-
-        assert thermal_img_0.shape == vision_img_0.shape, "Mismatching sensor image shapes"
-
-        h, w = thermal_img_0.shape[:2]
+        h, w = thermal_img.shape[:2]
         shape = self.img_size
-        thermal_img, ratio, pad = letterbox(thermal_img_0, auto=True, scaleup=True)
-        vision_img, ratio, pad = letterbox(vision_img_0, auto=True, scaleup=True)
+        thermal_img, ratio, pad = letterbox(thermal_img, shape, auto=False, scaleup=True)
+        vision_img, ratio, pad = letterbox(vision_img, shape, auto=False, scaleup=True)
 
         labels = []
         if os.path.isfile(label_path):
@@ -192,6 +186,7 @@ class LoadMultimodalImagesAndLabels(Dataset):
                     x = np.array([x.split() for x in f.read().splitlines()], dtype=np.float32)
 
             if x.size > 0:
+                # Normalized xywh to pixel xyxy format
                 labels = x.copy()
                 labels[:, 1] = ratio[0] * w * (x[:, 1] - x[:, 3] / 2) + pad[0]  # pad width
                 labels[:, 2] = ratio[1] * h * (x[:, 2] - x[:, 4] / 2) + pad[1]  # pad height
@@ -212,18 +207,19 @@ class LoadMultimodalImagesAndLabels(Dataset):
             labels_out[:, 1:] = torch.from_numpy(labels)
 
         thermal_img = thermal_img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
-
-        thermal_img = np.ascontiguousarray(thermal_img,
-                                           dtype= np.float32)  # uint8 to fp16/fp32
-        thermal_img /= 255.0
+        thermal_img = np.ascontiguousarray(thermal_img, dtype= np.float32)  # uint8 to fp16/fp32
+        #thermal_img /= 255.0
 
         vision_img = vision_img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
         vision_img = np.ascontiguousarray(vision_img, dtype= np.float32)
-        vision_img /= 255.0
+
+        #vision_img /= 255.0
 
 
+        return torch.from_numpy(thermal_img), torch.from_numpy(vision_img), labels_out, thermal_img_path, vision_img_path, ((h,w), (ratio,pad))
 
-        return (thermal_img), (vision_img), labels_out, thermal_img_path, vision_img_path, thermal_img_0, vision_img_0, ((h, w), (ratio, pad))
+
+ #       return (thermal_img), (vision_img), labels_out, thermal_img_path, vision_img_path, thermal_img_0, vision_img_0, ((h, w), (ratio, pad))
 
     def __len__(self):
         return len(self.thermal_files)
@@ -701,6 +697,19 @@ def load_image(self, index):
             h, w = img.shape[:2]
             return cv2.resize(img, (int(w * r), int(h * r)), interpolation=cv2.INTER_LINEAR)  # _LINEAR fastest
     return img
+
+def load_multimodal_images(self, index):
+    thermal_img = self.thermal_images[index]
+    vision_img = self.vision_images[index]
+    if (thermal_img is None or vision_img is None):
+        thermal_img_path = self.thermal_files[index]
+        vision_img_path = self.vision_files[index]
+        thermal_img = cv2.imread(thermal_img_path)
+        vision_img = cv2.imread(vision_img_path)
+        assert thermal_img is not None, 'Thermal Image Not Found ' + thermal_img_path
+        assert vision_img is not None, 'RGB Image Not Found ' + vision_img_path
+        assert thermal_img.shape == vision_img.shape, "Mismatching sensor image shapes"
+    return thermal_img, vision_img
 
 
 def augment_hsv(img, hgain=0.5, sgain=0.5, vgain=0.5):

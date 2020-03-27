@@ -176,7 +176,9 @@ def fusion_graph(thermal_detections, vision_detections, day_night, IOU_match=0.5
     return torch.FloatTensor(detections_to_return)
 
 
-def test(save_txt=False, save_img=False):
+def test(save_txt=False,
+         save_img=False,
+         dataloader = None):
     RGB_DAY_DETECTOR_MODEL = Net()
     RGB_DAY_DETECTOR_MODEL.load_state_dict(torch.load("../RGB_Day_Night_detector/day_detector.pt"))
     RGB_DAY_DETECTOR_MODEL.cuda()
@@ -261,16 +263,17 @@ def test(save_txt=False, save_img=False):
     vid_path, vid_writer = None, None
 
     save_img = True
-    dataset = LoadMultimodalImages(thermal_path=thermal_source,
-                                   vision_path=vision_source,
-                                   img_size=416,
-                                   half=opt.half)
 
-    dataset = LoadMultimodalImagesAndLabels(thermal_path=thermal_source,
-                                            vision_path=vision_source,
-                                            img_size=416)
-    # dataset_thermal = LoadImages(thermal_source, img_size=img_size, half=half)
-    # dataset_vision = LoadImages(vision_source, img_size=img_size, half=half)
+
+
+    if dataloader is None:
+        dataset = LoadMultimodalImagesAndLabels(thermal_path=thermal_source, vision_path=vision_source, img_size=416)
+        batch_size = 1
+        dataloader = DataLoader(dataset,
+                                batch_size=batch_size,
+                                num_workers=min([os.cpu_count(), batch_size if batch_size > 1 else 0, 8]),
+                                pin_memory=True,
+                                collate_fn=dataset.collate_fn)
 
     # Get classes and colors
     thermal_classes = load_classes(parse_data_cfg(opt.thermal_data)['names'])
@@ -278,79 +281,22 @@ def test(save_txt=False, save_img=False):
     thermal_colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(thermal_classes))]
     vision_colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(vision_classes))]
 
-    # zipped_dataset = zip(dataset_thermal, dataset_vision)
-
-    # #print(zipped_dataset)
-    # x = [[1],[2], [3]]
-    # y = [[4],[5], [6]]
-    # zipa = zip(x,y)
-    # for x, y in zipa:
-    #   # #print(x)
-    #  # #print(y)
-
-    # for thermal, vison in zipped_dataset:
-    # #print("thermal")
-    # # #print(thermal)
-    # #print("vison")
-    # # #print(vison)
-
-    # #print(dataset_thermal[0])
 
     # Run inference
     t0 = time.time()
-    # img_thermal, img_vision, targets, thermal_path, vision_path, _, _ in dataset:
+    p, r, f1, mp, mr, map, mf1 = 0., 0., 0., 0., 0., 0., 0.
     jdict, stats, ap, ap_class = [], [], [], []
     seen = 0
-    for img_thermal, img_vision, targets, thermal_path, vision_path,img0s_thermal, img0s_vision,ratio_pad_tuple in dataset:
-        t0 = time.time()
-        imgs0_vision_cp_targets = np.copy(img0s_vision)
-        # plt.imshow(img0s_vision)
-        # plt.pause(1)
-        # = targets
-        #img_vision = np.swapaxes(np.swapaxes(img_vision, 0,2), 0,1)
-        print(img_vision.shape)
-        print(img0s_vision.shape)
+    for batch_i, (img_thermal, img_vision, targets, thermal_path, vision_path, shapes) in enumerate(tqdm(dataloader, desc=s)):
+        img_thermal = img_thermal.to(device).float() / 255.0
+        img_vision = img_vision.to(device).float() / 255.0
+        targets = targets.to(device)
+        _, _, height, width = img_thermal.shape
 
-        print (ratio_pad_tuple[1])
-
-        img_thermal = torch.from_numpy(img_thermal).to(device)
-        height, width, _ = img0s_thermal.shape
-
-        tbox = xywh2xyxy(targets[:, 2:])
-        for det in tbox:
-            det[[0,2]] *=640
-            det[[1,3]] *= 512
-            x1, y1, x2, y2 = det[0], det[1], det[2], det[3]
-            print(x1, x2, y1, y2)
-            cv2.rectangle(imgs0_vision_cp_targets, (x1,y1), (x2,y2), (0,255,0), 6)
-       # plt.imshow(imgs0_vision_cp_targets)
-       # plt.pause(10)
-        #break
-        #print(tbox)
-        #tbox[:, :4] = scale_coords(img_vision.shape[1:], tbox[:, :4], img0s_thermal.shape, ratio_pad_tuple[1])
-
-        #print(tbox)
-
-        #tbox[:, [0, 2]] *= width
-        #tbox[:, [1, 3]] *= height
-
-        #for det in tbox:
-
-
-
-
-
-
-        img_vision = torch.from_numpy(img_vision).to(device)
-        # img_vision_1 = img_vision.cpu()
-        img_vision_1 = Image.open(vision_path)
-        img_vision_transformed_for_rgb_day_detector = transform(img_vision_1)
-        #print(img_vision_transformed_for_rgb_day_detector.shape)
+        img_vision_transformed_for_rgb_day_detector = transform(img_vision)
         img_vision_transformed_for_rgb_day_detector = img_vision_transformed_for_rgb_day_detector.cuda()
         img_vision_transformed_for_rgb_day_detector = img_vision_transformed_for_rgb_day_detector.unsqueeze(0)
         day_night = int(RGB_DAY_DETECTOR_MODEL(img_vision_transformed_for_rgb_day_detector).round()[0][0].item())
-        # #print("Day Night Value: ", day_night)
-
 
         if img_vision.ndimension() == 3:
             img_vision = img_vision.unsqueeze(0)
@@ -380,170 +326,92 @@ def test(save_txt=False, save_img=False):
             np_vision_pred = []
 
 
-        pred_thermal = [fusion_graph(np_thermal_pred, np_vision_pred, day_night)]
+        output = [fusion_graph(np_thermal_pred, np_vision_pred, day_night)]
 
 
 
 
         # Process detections
-        for i, det in enumerate(pred_thermal):  # detections per image
-
+        for si, pred in enumerate(output):  # detections per image
+            labels = targets[targets[:,0] == si, 1:]
             nl = len(targets)
             tcls = targets[:,0].tolist() if nl else []
             seen +=1
 
-            if len(det)==0:
-
+            if pred is None:
                 if nl:
                     stats.append(([], torch.Tensor(), torch.Tensor(), tcls))
                 continue
 
-            clip_coords(det, (height, width))
-            correct = [0] * len(det)
+            if save_json:
+                # [{"image_id": 42, "category_id": 18, "bbox": [258.15, 41.29, 348.26, 243.78], "score": 0.236}, ...
+                image_id = int(Path(paths[si]).stem.split('_')[-1])
+                box = pred[:, :4].clone()  # xyxy
+                scale_coords(imgs[si].shape[1:], box, shapes[si][0], shapes[si][1])  # to original shape
+                box = xyxy2xywh(box)  # xywh
+                box[:, :2] -= box[:, 2:] / 2  # xy center to top-left corner
+                for di, d in enumerate(pred):
+                    jdict.append({'image_id': image_id,
+                                  'category_id': coco91class[int(d[6])],
+                                  'bbox': [floatn(x, 3) for x in box[di]],
+                                  'score': floatn(d[4], 5)})
 
-            thermal_save_path = str(Path(thermal_out) / Path(thermal_path).name)
-            thermal_targets_save_path = str(Path(thermal_out_targets) / Path(thermal_path).name)
-            print("thermal save path: ", thermal_save_path)
-            print ("Det 1: ", det)
-            det[:, :4] = scale_coords(img_vision.shape[2:], det[:, :4], img0s_thermal.shape)
-            print("Det 2: ",  det)
+                # Clip boxes to image bounds
+                clip_coords(pred, (height, width))
 
-            for *xyxy, conf, _, cls in det:
+                # Assign all predictions as incorrect
+                correct = [0] * len(pred)
+                if nl:
+                    detected = []
+                    tcls_tensor = labels[:, 0]
 
-                 # Add bbox to image
-                label = '%s %.2f' % (thermal_classes[int(cls)], conf)
-                plot_one_box(xyxy, img0s_vision, label=label, color=thermal_colors[int(cls)])
-                print ("Saved image...")
+                    # target boxes
+                    tbox = xywh2xyxy(labels[:, 1:5])
+                    tbox[:, [0, 2]] *= width
+                    tbox[:, [1, 3]] *= height
 
+                    # Search for correct predictions
+                    for i, (*pbox, pconf, pcls_conf, pcls) in enumerate(pred):
 
-            if nl:
-                detected = []
-                tcls_tensor = targets[:,0]
-                #print (targets)
-                tbox = xywh2xyxy(targets[:, 2:])
+                        # Break if all targets already located in image
+                        if len(detected) == nl:
+                            break
 
-                tbox[:, [0,2]] *= width
-                tbox[:, [1,3]] *= height
-                #print("Tbox: ", tbox)
-                #print ("detections: ",  det[:, [0,1,2,3]])
+                        # Continue if predicted class not among image classes
+                        if pcls.item() not in tcls:
+                            continue
 
+                        # Best iou, index between pred and targets
+                        m = (pcls == tcls_tensor).nonzero().view(-1)
+                        iou, bi = bbox_iou(pbox, tbox[m]).max(0)
 
+                        # If iou > threshold and class is correct mark as correct
+                        if iou > iou_thres and m[bi] not in detected:  # and pcls == tcls[bi]:
+                            correct[i] = 1
+                            detected.append(m[bi])
 
-                for i, (*pbox, pconf, pcls_conf, pcls) in enumerate(det):
-                    if len(detected) == nl:
-                        break
+                # Append statistics (correct, conf, pcls, tcls)
+                stats.append((correct, pred[:, 4].cpu(), pred[:, 6].cpu(), tcls))
 
-                    if pcls.item() not in tcls:
-                        continue
+        # Compute statistics
+        stats = [np.concatenate(x, 0) for x in list(zip(*stats))]  # to numpy
+        if len(stats):
+            p, r, ap, f1, ap_class = ap_per_class(*stats)
+            mp, mr, map, mf1 = p.mean(), r.mean(), ap.mean(), f1.mean()
+            nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
+        else:
+            nt = torch.zeros(1)
 
-                    m = (pcls == tcls_tensor).nonzero().view(-1)
-                    iou, bi = bbox_iou(pbox, tbox[m]).max(0)
-                   # print (iou)
+        # Print results
+        pf = '%20s' + '%10.3g' * 6  # print format
+        print(pf % ('all', seen, nt.sum(), mp, mr, map, mf1))
 
-                    #If iou > threshold and class is correct mark as correct
-                    if iou > 0.5 and m[bi] not in detected:
-                        correct[i] = 1
-                        detected.append(m[bi])
+        # Print results per class
+        if verbose and nc > 1 and len(stats):
+            for i, c in enumerate(ap_class):
+                print(pf % (names[c], seen, nt[c], p[i], r[i], ap[i], f1[i]))
 
-                stats.append((correct, det[:,4].cpu(), det[:,6], tcls))
-                cv2.imwrite(thermal_save_path, img0s_vision)
-                cv2.imwrite(thermal_targets_save_path, imgs0_vision_cp_targets)
-    stats = [np.concatenate(x, 0) for x in list(zip(*stats))]  # to numpy
-    if len(stats):
-        p, r, ap, f1, ap_class = ap_per_class(*stats)
-        mp, mr, map, mf1 = p.mean(), r.mean(), ap.mean(), f1.mean()
-        nt = np.bincount(stats[3].astype(np.int64), minlength=2)  # number of targets per class
-    else:
-        nt = torch.zeros(1)
-
-    # Print results
-    pf = '%20s' + '%10.3g' * 6  # print format
-    print(pf % ('all', seen, nt.sum(), mp, mr, map, mf1))
-
-
-
-    #         p, s, im0 = thermal_path, '', img0s_thermal
-    #
-    #         thermal_save_path = str(Path(thermal_out) / Path(p).name)
-    #         s += '%gx%g ' % img_thermal.shape[2:]  # # #printstring
-    #         if det is not None and len(det):
-    #             # Rescale boxes from img_size to im0 size
-    #             det[:, :4] = scale_coords(img_thermal.shape[2:], det[:, :4], im0.shape).round()
-    #
-    #             # # #printresults
-    #             for c in det[:, -1].unique():
-    #                 n = (det[:, -1] == c).sum()  # detections per class
-    #                 s += '%g %ss, ' % (n, thermal_classes[int(c)])  # add to string
-    #
-    #             # Write results
-    #             for *xyxy, conf, _, cls in det:
-    #                 if save_txt:  # Write to file
-    #                     with open(thermal_save_path + '.txt', 'a') as file:
-    #                         file.write(('%g ' * 6 + '\n') % (*xyxy, cls, conf))
-    #
-    #                 if save_img or view_img:  # Add bbox to image
-    #                     label = '%s %.2f' % (thermal_classes[int(cls)], conf)
-    #                     plot_one_box(xyxy, img0s_vision, label=label, color=thermal_colors[int(cls)])
-    #
-    #         #print('%sDone. (%.3fs)' % (s, time.time() - t))
-    #         #
-    #         for i, det in enumerate(pred_vision):  # detections per image
-    #             # if webcam:  # batch_size >= 1
-    #             #     p, s, im0 = path[i], '%g: ' % i, im0s[i]
-    #             # else:
-    #             p, s, im0 = vision_path, '', imgs0_vision_og
-    #             # #print("TYPE ", type(imgs0_vision_og))
-    #
-    #             vision_save_path = str(Path(vision_out) / Path(p).name)
-    #             s += '%gx%g ' % img_vision.shape[2:]  # # #printstring
-    #             if det is not None and len(det):
-    #                 # Rescale boxes from img_size to im0 size
-    #                 det[:, :4] = scale_coords(img_vision.shape[2:], det[:, :4], im0.shape).round()
-    #
-    #                 # # #printresults
-    #                 for c in det[:, -1].unique():
-    #                     n = (det[:, -1] == c).sum()  # detections per class
-    #                     s += '%g %ss, ' % (n, vision_classes[int(c)])  # add to string
-    #
-    #                 # Write results
-    #                 for *xyxy, conf, _, cls in det:
-    #                     if save_txt:  # Write to file
-    #                         with open(vision_save_path + '.txt', 'a') as file:
-    #                             file.write(('%g ' * 6 + '\n') % (*xyxy, cls, conf))
-    #
-    #                     if save_img or view_img:  # Add bbox to image
-    #                         label = '%s %.2f' % (vision_classes[int(cls)], conf)
-    #                         plot_one_box(xyxy, imgs0_vision_og, label=label, color=vision_colors[int(cls)])
-    #
-    #             #print('%sDone. (%.3fs)' % (s, time.time() - t))
-    #
-    #                 # Stream results
-    #                 # if view_img:
-    #                 #     cv2.imshow(p, im0)
-    #
-    #         # results (image with detections)
-    #         if save_img:
-    #
-    #             cv2.imwrite(thermal_save_path, img0s_vision)
-    #             cv2.imwrite(vision_save_path, imgs0_vision_og)
-    # #             else:
-    # #                 if vid_path != save_path:  # new video
-    # #                     vid_path = save_path
-    # #                     if isinstance(vid_writer, cv2.VideoWriter):
-    # #                         vid_writer.release()  # release previous video writer
-    # #
-    # #                     fps = vid_cap.get(cv2.CAP_PROP_FPS)
-    # #                     w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    # #                     h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    # #                     vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*opt.fourcc), fps, (w, h))
-    # #                 vid_writer.write(im0)
-    # #
-    # # if save_txt or save_img:
-    # #     #print('Results saved to %s' % os.getcwd() + os.sep + out)
-    # #     if platform == 'darwin':  # MacOS
-    # #         os.system('open ' + out + ' ' + save_path)
-    # #
-    # #print('Done. (%.3fs)' % (time.time() - t0))
+        return (mp, mr, map,  mf1, *(loss / len(dataloader)).tolist())
 
 
 if __name__ == '__main__':
@@ -572,4 +440,4 @@ if __name__ == '__main__':
     #print(opt)
 
     with torch.no_grad():
-        test()
+        print(test())
