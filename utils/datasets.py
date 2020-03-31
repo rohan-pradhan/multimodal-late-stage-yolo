@@ -166,12 +166,25 @@ class LoadMultimodalImagesAndLabels(Dataset):
         self.vision_images = [None] * n
         self.labels = [None] * n
 
+    def load_multimodal_images(self, index):
+        thermal_img = self.thermal_images[index]
+        vision_img = self.vision_images[index]
+        if (thermal_img is None or vision_img is None):
+            thermal_img_path = self.thermal_files[index]
+            vision_img_path = self.vision_files[index]
+            thermal_img = cv2.imread(thermal_img_path)
+            vision_img = cv2.imread(vision_img_path)
+            assert thermal_img is not None, 'Thermal Image Not Found ' + thermal_img_path
+            assert vision_img is not None, 'RGB Image Not Found ' + vision_img_path
+            assert thermal_img.shape == vision_img.shape, "Mismatching sensor image shapes"
+        return thermal_img, vision_img
+
     def __getitem__(self, index):
         thermal_img_path = self.thermal_files[index]
         vision_img_path = self.vision_files[index]
         label_path = self.label_files[index]
 
-        thermal_img, vision_img = load_multimodal_images(index)
+        thermal_img, vision_img = self.load_multimodal_images(index)
 
         h, w = thermal_img.shape[:2]
         shape = self.img_size
@@ -194,13 +207,13 @@ class LoadMultimodalImagesAndLabels(Dataset):
                 labels[:, 4] = ratio[1] * h * (x[:, 2] + x[:, 4] / 2) + pad[1]
 
         nL = len(labels)  # number of labels
-        if nL:
-            # convert xyxy to xywh
-            labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])
-
-            # Normalize coordinates 0 - 1
-            labels[:, [2, 4]] /= thermal_img.shape[0]  # height
-            labels[:, [1, 3]] /= thermal_img.shape[1]  # width
+        # if nL:
+        #     # convert xyxy to xywh
+        #     labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])
+        #
+        #     # Normalize coordinates 0 - 1
+        #     labels[:, [2, 4]] /= thermal_img.shape[0]  # height
+        #     labels[:, [1, 3]] /= thermal_img.shape[1]  # width
 
         labels_out = torch.zeros((nL, 6))
         if nL:
@@ -698,18 +711,7 @@ def load_image(self, index):
             return cv2.resize(img, (int(w * r), int(h * r)), interpolation=cv2.INTER_LINEAR)  # _LINEAR fastest
     return img
 
-def load_multimodal_images(self, index):
-    thermal_img = self.thermal_images[index]
-    vision_img = self.vision_images[index]
-    if (thermal_img is None or vision_img is None):
-        thermal_img_path = self.thermal_files[index]
-        vision_img_path = self.vision_files[index]
-        thermal_img = cv2.imread(thermal_img_path)
-        vision_img = cv2.imread(vision_img_path)
-        assert thermal_img is not None, 'Thermal Image Not Found ' + thermal_img_path
-        assert vision_img is not None, 'RGB Image Not Found ' + vision_img_path
-        assert thermal_img.shape == vision_img.shape, "Mismatching sensor image shapes"
-    return thermal_img, vision_img
+
 
 
 def augment_hsv(img, hgain=0.5, sgain=0.5, vgain=0.5):
