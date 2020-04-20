@@ -155,7 +155,8 @@ class FLIR_ADAS:
         #1 -> 0
         #3 -> 1
         #Delete all other numbers
-
+        # 0 = person
+        # 1 = car
         def change_category_id(category_id):
             if (category_id == 1):
                 category_id = 0

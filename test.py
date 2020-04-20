@@ -48,7 +48,7 @@ def test(cfg,
 
     # Dataloader
     if dataloader is None:
-        dataset = LoadImagesAndLabels(test_path, img_size, batch_size, rect=True)
+        dataset = LoadImagesAndLabels(test_path, img_size, batch_size, rect=False)
         batch_size = min(batch_size, len(dataset))
         dataloader = DataLoader(dataset,
                                 batch_size=batch_size,
@@ -194,6 +194,7 @@ def test(cfg,
     maps = np.zeros(nc) + map
     for i, c in enumerate(ap_class):
         maps[c] = ap[i]
+    print (mp, mr, map, mf1)
     return (mp, mr, map, mf1, *(loss / len(dataloader)).tolist()), maps
 
 
@@ -202,7 +203,7 @@ if __name__ == '__main__':
     parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='cfg file path')
     parser.add_argument('--data', type=str, default='data/coco.data', help='coco.data file path')
     parser.add_argument('--weights', type=str, default='weights/yolov3-spp.weights', help='path to weights file')
-    parser.add_argument('--batch-size', type=int, default=16, help='size of each image batch')
+    parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
     parser.add_argument('--img-size', type=int, default=416, help='inference size (pixels)')
     parser.add_argument('--iou-thres', type=float, default=0.5, help='iou threshold required to qualify as detected')
     parser.add_argument('--conf-thres', type=float, default=0.001, help='object confidence threshold')
@@ -221,4 +222,4 @@ if __name__ == '__main__':
              opt.iou_thres,
              opt.conf_thres,
              opt.nms_thres,
-             opt.save_json or (opt.data == 'data/coco.data'))
+             False)
