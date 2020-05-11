@@ -33,9 +33,12 @@ hyp = {'giou': 3.54,  # giou loss gain
        'momentum': 0.937,  # SGD momentum
        'weight_decay': 0.000484,  # optimizer weight decay
        'fl_gamma': 0.5,  # focal loss gamma
-       'hsv_h': 0.0138,  # image HSV-Hue augmentation (fraction)
-       'hsv_s': 0.678,  # image HSV-Saturation augmentation (fraction)
-       'hsv_v': 0.36,  # image HSV-Value augmentation (fraction)
+       #'hsv_h': 0.0138,  # image HSV-Hue augmentation (fraction)
+       #'hsv_s': 0.678,  # image HSV-Saturation augmentation (fraction)
+       #'hsv_v': 0.36,  # image HSV-Value augmentation (fraction)
+       'hsv_h': 0.0,  # image HSV-Hue augmentation (fraction)
+       'hsv_s': 0.0,  # image HSV-Saturation augmentation (fraction)
+       'hsv_v': 0.0,  # image HSV-Value augmentation (fraction)
        'degrees': 1.98,  # image rotation (+/- deg)
        'translate': 0.05,  # image translation (+/- fraction)
        'scale': 0.05,  # image scale (+/- gain)
@@ -197,6 +200,14 @@ def train():
                                   cache_labels=epochs > 10,
                                   cache_images=opt.cache_images and not opt.prebias)
 
+    # dataset = LoadFourChannelImagesandLabels(train_path, img_size, batch_size,
+    #                               augment=True,
+    #                               hyp=hyp,  # augmentation hyperparameters
+    #                               rect=opt.rect,  # rectangular training
+    #                               image_weights=opt.img_weights,
+    #                               cache_labels=epochs > 10,
+    #                               cache_images=opt.cache_images and not opt.prebias)
+
     # Dataloader
     batch_size = min(batch_size, len(dataset))
     nw = min([os.cpu_count(), batch_size if batch_size > 1 else 0, 8])  # number of workers
@@ -217,6 +228,15 @@ def train():
                                                  num_workers=nw,
                                                  pin_memory=True,
                                                  collate_fn=dataset.collate_fn)
+
+        # testloader = torch.utils.data.DataLoader(LoadFourChannelImagesandLabels(test_path, img_size, batch_size, hyp=hyp,
+        #                                                              rect=True,
+        #                                                              cache_labels=True,
+        #                                                              cache_images=opt.cache_images),
+        #                                          batch_size=batch_size,
+        #                                          num_workers=nw,
+        #                                          pin_memory=True,
+        #                                          collate_fn=dataset.collate_fn)
 
     # Start training
     nb = len(dataloader)
@@ -251,7 +271,7 @@ def train():
         mloss = torch.zeros(4).to(device)  # mean losses
         pbar = tqdm(enumerate(dataloader), total=nb)  # progress bar
         for i, (imgs, targets, paths, _) in pbar:# batch -------------------------------------------------------------
-            print(paths)
+            #print(paths)
             ni = i + nb * epoch  # number integrated batches (since train start)
             imgs = imgs.to(device).float() / 255.0  # uint8 to float32, 0 - 255 to 0.0 - 1.0
             targets = targets.to(device)
@@ -266,8 +286,8 @@ def train():
                     imgs = F.interpolate(imgs, size=ns, mode='bilinear', align_corners=False)
 
             # Plot images with bounding boxes
-            if ni == 0 or ni % 1000 == 0:
-                fname = 'train_batch%g.jpg' % ni
+            if ni == 0:
+                fname = 'train_batch%g.tiff' % ni
                 plot_images(imgs=imgs, targets=targets, paths=paths, fname=fname)
                 if tb_writer:
                     tb_writer.add_image(fname, cv2.imread(fname)[:, :, ::-1], dataformats='HWC')
@@ -416,7 +436,6 @@ def prebias():
         opt.weights = wdir + 'backbone.pt'  # assign backbone
         opt.prebias = False  # disable prebias
         opt.img_weights = a  # reset settings
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

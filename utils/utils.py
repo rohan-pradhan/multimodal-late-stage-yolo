@@ -353,12 +353,11 @@ def compute_loss(p, targets, model):  # predictions, targets, model
     # Compute losses
     np, ng = 0, 0  # number grid points, targets
     for i, pi in enumerate(p): # layer index, layer predictions
-        #print (pi)
-        # print (type(pi))
-        print (pi.shape)
         # print (tcls)
         b, a, gj, gi = indices[i]  # image, anchor, gridy, gridx
+
         tobj = torch.zeros_like(pi[..., 0])  # target obj
+
         np += tobj.numel()
 
         # Compute losses
@@ -417,9 +416,11 @@ def compute_loss(p, targets, model):  # predictions, targets, model
     return loss, torch.cat((lbox, lobj, lcls, loss)).detach()
 
 
+
+
+
 def build_targets(model, targets):
     # targets = [image, class, x, y, w, h]
-
     nt = len(targets)
     tcls, tbox, indices, av = [], [], [], []
     multi_gpu = type(model) in (nn.parallel.DataParallel, nn.parallel.DistributedDataParallel)

@@ -4,21 +4,28 @@ import cv2
 
 from models import *  # set ONNX_EXPORT in models.py
 from utils.datasets import *
+from utils.gating_network import GatingNetwork
 from utils.utils import *
-from utils.DayNightDetect import Net
+#from utils.RGB_Day_Night_Detector_updated.DayNightDetect import Net
 import networkx as nx
 import torchvision.transforms as transforms
 import torch
 from torch.utils.data import Dataset, DataLoader
 import tqdm
+from utils.ObjGraphClique import GraphClique
+from utils.AdaptiveFusionModule import FogDetect
+from utils.AdaptiveFusionModule import DayNightDetect
 
+
+CONST_NIGHT_ONLY = -1
+CONST_DAY_ONLY = 1
+CONST_BOTH = 0
 
 
 def bb_intersection_over_union(boxA, boxB):
     # determine the (x, y)-coordinates of the intersection rectangle
-    # # #print("box a", boxA[0], "boxb", boxB[0])
+
     xA = max(boxA[0], boxB[0])
-    # #print("gotem")
     yA = max(boxA[1], boxB[1])
     xB = min(boxA[2], boxB[2])
     yB = min(boxA[3], boxB[3])
@@ -36,14 +43,25 @@ def bb_intersection_over_union(boxA, boxB):
     return iou
 
 
-def fusion_graph(thermal_detections, vision_detections, day_night, IOU_match=0.5):
-    #t0 = time.time()
+def fusion_graph(thermal_detections, vision_detections, day_night, thermal_mult, vision_mult, IOU_match=0.5 ):
+
     t_G = nx.Graph()
     v_G = nx.Graph()
     counter = 0
-    thermal_multiplier = 0.0 if day_night == 1 else 0.0
-    vision_multiplier = 1 if day_night == 1 else 1
-    #print("Thermal Multiplier: ", thermal_multiplier, "| Vision Multiplier: ", vision_multiplier)
+    #thermal_mult = float(thermal_mult)
+    #vision_mult = float(vision_mult)
+
+    #thermal_multiplier = thermal_mult if day_night == 1 else vision_mult
+    #vision_multiplier = vision_mult if day_night == 1 else thermal_mult
+    # thermal_multiplier = thermal_mult
+    # vision_multiplier = vision_mult
+
+    #thermal_multiplier = 1
+    #vision_multiplier = 0
+    #
+
+    thermal_multiplier = 0.9 if day_night == 1 else 0.1
+    vision_multiplier = 0.1 if day_night == 1 else 0.9
 
     for det in thermal_detections:
         thermal_box = [det[0],
@@ -54,6 +72,7 @@ def fusion_graph(thermal_detections, vision_detections, day_night, IOU_match=0.5
                        det[5],
                        det[6],
                        1]
+
         t_G.add_node(counter, data=thermal_box)
         counter += 1
     for det in vision_detections:
@@ -65,15 +84,9 @@ def fusion_graph(thermal_detections, vision_detections, day_night, IOU_match=0.5
                       det[5],
                       det[6],
                       0]
+        v_G.add_node(counter, data=vision_box)
+        counter +=1
 
-        if vision_box[6] == 2:
-            vision_box[6] = 1
-
-            v_G.add_node(counter, data=vision_box)
-            counter += 1
-        elif vision_box[6] == 0:
-            v_G.add_node(counter, data=vision_box)
-            counter += 1
 
     G = nx.compose(t_G, v_G)
     for v_node in v_G.nodes(data=True):
@@ -92,7 +105,7 @@ def fusion_graph(thermal_detections, vision_detections, day_night, IOU_match=0.5
         max_weight = 0
         index = -1
         counter = 0
-        # # #print(node)
+
         for x, y in (edge_list):
             weight = G.get_edge_data(x, y)['weight']
             if weight > max_weight:
@@ -145,15 +158,10 @@ def fusion_graph(thermal_detections, vision_detections, day_night, IOU_match=0.5
             adj_node = G.nodes[adj_node_index]
 
             det_b = adj_node['data']
-            # det_c = [(det_a[0] + det_b[0]) / 2,
-            #          (det_a[1] + det_b[1]) / 2,
-            #          (det_a[2] + det_b[2]) / 2,
-            #          (det_a[3] + det_b[3]) / 2,
-            #          (det_a[4] + det_b[4]) / 2,
-            #          (det_a[5] + det_b[5]) / 2,
-            #          det_a[6]]
+
             if (det_a_thermal):
                 #det_a is a thermal image
+
                 det_c = [(thermal_multiplier*det_a[0] + vision_multiplier*det_b[0]),
                          (thermal_multiplier*det_a[1] + vision_multiplier*det_b[1]),
                          (thermal_multiplier*det_a[2] + vision_multiplier*det_b[2]),
@@ -175,21 +183,29 @@ def fusion_graph(thermal_detections, vision_detections, day_night, IOU_match=0.5
 
 
             nodes_visited.append(adj_node_index)
-            if det_c[4] > 0.4: detections_to_return.append(det_c)
+            if det_c[4] >= 0.4: detections_to_return.append(det_c)
 
     return torch.FloatTensor(detections_to_return)
 
 
 def test(dt_path,
          gt_path,
-         save_txt=False,
-         save_img=False,
-         dataloader = None):
-    RGB_DAY_DETECTOR_MODEL = Net()
-    RGB_DAY_DETECTOR_MODEL.load_state_dict(torch.load("../RGB_Day_Night_detector/day_detector.pt"))
+         model_arch):
+    model_arch = model_arch
+    print("Testing model with ", model_arch)
+
+    RGB_DAY_DETECTOR_MODEL = DayNightDetect.Net()
+    RGB_DAY_DETECTOR_MODEL.load_state_dict(torch.load("utils/RGB_Day_Night_Detector_updated/day_detector.pt"))
     RGB_DAY_DETECTOR_MODEL.cuda()
     RGB_DAY_DETECTOR_MODEL.eval()
-    transform = transforms.Compose([transforms.ToPILImage(),transforms.RandomResizedCrop(224, scale=(0.08, 1.0), ratio=(0.75, 1.3333333333333333), interpolation=2),transforms.ToTensor()])
+
+    FOG_DETECTOR_MODEL = FogDetect.Net()
+    FOG_DETECTOR_MODEL.load_state_dict(torch.load("utils/AFM_WEIGHTS/fog_detector.pt"))
+    FOG_DETECTOR_MODEL.cuda()
+    FOG_DETECTOR_MODEL.eval()
+
+
+    transform = transforms.Compose([transforms.ToPILImage(),transforms.Resize((224,224)),transforms.ToTensor()])
 
 
 
@@ -202,24 +218,9 @@ def test(dt_path,
                                                                                                               opt.vision_weights, \
                                                                                                               opt.half, \
                                                                                                               opt.view_img
-    # webcam = source == '0' or source.startswith('rtsp') or source.startswith('http') or source.endswith('.txt')
 
     # Initialize
     device = torch_utils.select_device(device='cpu' if ONNX_EXPORT else opt.device)
-
-    thermal_out_targets = thermal_out+"_targets"
-
-    if os.path.exists(thermal_out):
-        shutil.rmtree(thermal_out)  # delete output folder
-    os.makedirs(thermal_out)  # make new output folder
-
-    if os.path.exists(thermal_out_targets):
-        shutil.rmtree(thermal_out_targets)  # delete output folder
-    os.makedirs(thermal_out_targets)  # make new output folder
-
-    if os.path.exists(vision_out):
-        shutil.rmtree(vision_out)  # delete output folder
-    os.makedirs(vision_out)  # make new output folder
 
     if os.path.exists(dt_path):
         shutil.rmtree(dt_path)
@@ -241,31 +242,11 @@ def test(dt_path,
     if vision_weights.endswith('.pt'):
         model_vision.load_state_dict(torch.load(vision_weights, map_location=device)['model'])
 
-    # Second-stage classifier
-    # classify = False
-    # if classify:
-    #     modelc = torch_utils.load_classifier(name='resnet101', n=2)  # initialize
-    #     modelc.load_state_dict(torch.load('weights/resnet101.pt', map_location=device)['model'])  # load weights
-    #     modelc.to(device).eval()
-
-    # Fuse Conv2d + BatchNorm2d layers
-    # model.fuse()
 
     # Eval mode
     model_thermal.to(device).eval()
     model_vision.to(device).eval()
 
-    # # Export mode
-    # if ONNX_EXPORT:
-    #     img = torch.zeros((1, 3) + img_size)  # (1, 3, 320, 192)
-    #     torch.onnx.export(model, img, 'weights/export.onnx', verbose=False, opset_version=10)
-    #
-    #     # Validate exported model
-    #     import onnx
-    #     model = onnx.load('weights/export.onnx')  # Load the ONNX model
-    #     onnx.checker.check_model(model)  # Check that the IR is well formed
-    #     #print(onnx.helper.#printable_graph(model.graph))  # # #printa human readable representation of the graph
-    #     return
 
     # Half precision
     half = half and device.type != 'cpu'  # half precision only supported on CUDA
@@ -279,10 +260,17 @@ def test(dt_path,
     save_img = True
 
 
+    GatingNet = GatingNetwork.GatingNet()
+    GatingNet.eval()
+    GatingNet.cuda()
+    GatingNet.load_state_dict(torch.load("./GatingNet.pt"))
+
+
+
 
 
     dataset = LoadMultimodalImagesAndLabels(thermal_path=thermal_source, vision_path=vision_source, img_size=416)
-    #batch_size = 10
+
 
     dataloader = DataLoader(dataset,
                             pin_memory=True)
@@ -300,22 +288,20 @@ def test(dt_path,
     jdict, stats, ap, ap_class = [], [], [], []
     seen = 0
 
-
-    for batch_i, (img_thermal, img_vision, targets, thermal_path, vision_path, shapes) in enumerate(dataloader):
-    #for i in range(len(dataset)):
-        print ("batch_i: ", batch_i)
+    counter = 0
+    for batch_i, (img_thermal, img_vision, targets, thermal_path, vision_path, shapes) in enumerate(tqdm.tqdm(dataloader)):
 
         img_thermal = img_thermal.to(device).float() / 255.0
         img_vision = img_vision.float() / 255.0
         targets = targets.to(device)
         _, _, height, width = img_thermal.shape
-
-        img_vision_transformed_for_rgb_day_detector = transform(torch.squeeze(img_vision))
+        img_vision_transformed_for_AFM = transform(torch.squeeze(img_vision))
         img_vision = img_vision.to(device)
 
-        img_vision_transformed_for_rgb_day_detector = img_vision_transformed_for_rgb_day_detector.cuda()
-        img_vision_transformed_for_rgb_day_detector = img_vision_transformed_for_rgb_day_detector.unsqueeze(0)
-        day_night = int(RGB_DAY_DETECTOR_MODEL(img_vision_transformed_for_rgb_day_detector).round()[0][0].item())
+        img_vision_transformed_for_AFM = img_vision_transformed_for_AFM.cuda().unsqueeze(0)
+
+        day_value = RGB_DAY_DETECTOR_MODEL(img_vision_transformed_for_AFM)[0][0].detach()
+        fog_value = FOG_DETECTOR_MODEL(img_vision_transformed_for_AFM)[0][0].detach()
 
         if img_vision.ndimension() == 3:
             img_vision = img_vision.unsqueeze(0)
@@ -345,19 +331,34 @@ def test(dt_path,
             np_vision_pred = []
 
 
-        output = [fusion_graph(np_thermal_pred, np_vision_pred, day_night)]
-        #print (output)
-        #print(targets)
+        if (model_arch == "thermal_only"):
+            output = [GraphClique.fusion_graph(np_thermal_pred, np_vision_pred, 1, 0)]
+
+        elif (model_arch == "vision_only"):
+            output = [GraphClique.fusion_graph(np_thermal_pred, np_vision_pred, 0.0, 1)]
+
+        elif (model_arch == "average"):
+            output = [GraphClique.fusion_graph(np_thermal_pred, np_vision_pred, 0.5, 0.5)]
+
+        elif (model_arch == "adaptive"):
+
+            gating_input = torch.autograd.Variable(torch.tensor([[day_value, fog_value]]).float(),
+                                                   requires_grad=True).cuda()
+
+            gating_output = GatingNet(gating_input)
+
+            thermal_multiplier = float(gating_output[0][0].item())
+            vision_multiplier = float(gating_output[0][1].item())
+
+            output = [GraphClique.fusion_graph(np_thermal_pred, np_vision_pred, thermal_multiplier, vision_multiplier)]
 
         base_name = os.path.basename(thermal_path[0]).split(".")[0] + ".txt"
         full_gt_path = os.path.join(gt_path, base_name)
         full_dt_path = os.path.join(dt_path, base_name)
         output = output[0].squeeze()
-        print(targets.shape)
+
         targets = targets.squeeze()
-        print(targets.shape)
-        print("Outputs ", output)
-        print("Targets ", targets)
+
         if targets.dim() == 1:
             targets.unsqueeze_(0)
         if output.dim() ==1:
@@ -366,7 +367,12 @@ def test(dt_path,
             for gt in output:
                 if len(gt) ==0:
                     continue
-                category = "person" if gt[6] == 0 else "car"
+                if gt[6] == 0:
+                    category = "person"
+                elif gt[6] == 1:
+                     category = "people"
+                elif gt[6] == 2:
+                    category = "cyclist"
                 x1 = str(gt[0].item())
                 y1 = str(gt[1].item())
                 x2 = str(gt[2].item())
@@ -378,7 +384,12 @@ def test(dt_path,
 
         with open(full_gt_path, 'a+') as f:
             for gt in targets:
-                category = "person" if gt[1] == 0 else "car"
+                if gt[1] == 0:
+                    category = "person"
+                elif gt[1]==1:
+                    category = "people"
+                elif gt[1]==2:
+                    category = "cyclist"
                 x1 = str(gt[2].item())
                 y1 = str(gt[3].item())
                 x2 = str(gt[4].item())
@@ -386,117 +397,7 @@ def test(dt_path,
                 to_write = [category, x1, y1, x2, y2,"\n"]
                 str_to_write = " ".join(to_write)
                 f.write(str_to_write)
-
-
-
-
-
-   #      iou_thres = 0.5
-   #      print (targets.shape)
-   #      targets = targets.squeeze(0)
-   #      # Process detections
-   #      for si, pred in enumerate(output):# detections per image
-   #          print ("Targets: ", targets.shape)
-   #          pred = pred.to(device)
-   #          print ("Preds: ", pred.shape)
-   #          labels = targets[targets[:,0] == si, 1:]
-   #          nl = len(targets)
-   #          tcls = targets[:,0].tolist() if nl else []
-   #          seen +=1
-   #
-   #          if pred is None or len(pred) ==0:
-   #              print ("Pred is none.")
-   #              if nl:
-   #                  stats.append(([], torch.Tensor(), torch.Tensor(), tcls))
-   #              continue
-   #
-   #          # if save_json:
-   #          #     # [{"image_id": 42, "category_id": 18, "bbox": [258.15, 41.29, 348.26, 243.78], "score": 0.236}, ...
-   #          #     image_id = int(Path(paths[si]).stem.split('_')[-1])
-   #          #     box = pred[:, :4].clone()  # xyxy
-   #          #     scale_coords(imgs[si].shape[1:], box, shapes[si][0], shapes[si][1])  # to original shape
-   #          #     box = xyxy2xywh(box)  # xywh
-   #          #     box[:, :2] -= box[:, 2:] / 2  # xy center to top-left corner
-   #          #     for di, d in enumerate(pred):
-   #          #         jdict.append({'image_id': image_id,
-   #          #                       'category_id': coco91class[int(d[6])],
-   #          #                       'bbox': [floatn(x, 3) for x in box[di]],
-   #          #                       'score': floatn(d[4], 5)})
-   #
-   #          # Clip boxes to image bounds
-   #          clip_coords(pred, (height, width))
-   #
-   #          # Assign all predictions as incorrect
-   #          correct = [0] * len(pred)
-   #          if nl:
-   #              detected = []
-   #              tcls_tensor = labels[:, 0]
-   #              tcls_tensor.to(device)
-   #
-   #              # target boxes
-   #              tbox = xywh2xyxy(labels[:, 1:5])
-   #              tbox[:, [0, 2]] *= width
-   #              tbox[:, [1, 3]] *= height
-   #
-   #              # Search for correct predictions
-   #              for i, (*pbox, pconf, pcls_conf, pcls) in enumerate(pred):
-   #
-   #                  # Break if all targets already located in image
-   #                  if len(detected) == nl:
-   #                      break
-   #
-   #                  # Continue if predicted class not among image classes
-   #                  if pcls.item() not in tcls:
-   #                      continue
-   #
-   #                  # Best iou, index between pred and targets
-   #                  m = (pcls == tcls_tensor).nonzero().view(-1)
-   #                  if len(m) == 0:
-   #                      continue
-   #                  print ("M: ", m)
-   #                  print ("BBOX")
-   #                  print (bbox_iou(pbox, tbox[m]))
-   #                  iou, bi = bbox_iou(pbox, tbox[m]).max(0)
-   #
-   #                  # If iou > threshold and class is correct mark as correct
-   #                  if iou > iou_thres and m[bi] not in detected:  # and pcls == tcls[bi]:
-   #                      correct[i] = 1
-   #                      detected.append(m[bi])
-   #
-   #          # Append statistics (correct, conf, pcls, tcls)
-   #          to_append = (correct, pred[:, 4].cpu(), pred[:, 6].cpu(), tcls)
-   #          print (to_append)
-   #          stats.append(to_append)
-   #          #print(stats)
-   #          print( )
-   #
-   #      nc = 2
-   #      # Compute statistics
-   #  stats = [np.concatenate(x, 0) for x in list(zip(*stats))]  # to numpy
-   #  print(stats)
-   #  if len(stats):
-   #      p, r, ap, f1, ap_class = ap_per_class(*stats)
-   #      mp, mr, map, mf1 = p.mean(), r.mean(), ap.mean(), f1.mean()
-   #      nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
-   #  else:
-   #      nt = torch.zeros(1)
-   #
-   #  # Print results
-   #  pf = '%20s' + '%10.3g' * 6  # print format
-   #  #print(pf % ('all', seen, nt.sum(), mp, mr, map, mf1))
-   #
-   #  verbose = True
-   #  # Print results per class
-   #  if verbose and nc > 1 and len(stats):
-   #      print (len(ap_class))
-   #      for i, c in enumerate(ap_class):
-   #          #print(pf % (names[c], seen, nt[c], p[i], r[i], ap[i], f1[i]))
-   #          print(pf % ([c], seen, nt[c], p[i], r[i], ap[i], f1[i]))
-   #
-   #
-   # # return (mp, mr, map,  mf1, *(loss / len(dataloader)).tolist())
-   #  return (mp, mr, map,  mf1)
-
+    print (counter)
 
 
 if __name__ == '__main__':
@@ -523,9 +424,14 @@ if __name__ == '__main__':
     parser.add_argument('--view-img', action='store_true', help='display results')
     parser.add_argument('--dt_path')
     parser.add_argument('--gt_path')
+    parser.add_argument("--thermal_multiplier")
+    parser.add_argument("--vision_multiplier")
+    parser.add_argument("--day_night", default=0)
+    parser.add_argument("--model_arch", default="adaptive")
     opt = parser.parse_args()
     #print(opt)
 
     with torch.no_grad():
-        print(test(opt.dt_path, opt.gt_path))
+        print(test(opt.dt_path, opt.gt_path, opt.model_arch))
         #python test_multimodal.py --vision_source D:/FLIR/val/RGB_adjusted --thermal_source D:/FLIR/val/thermal_8_bit_adjusted
+

@@ -1,0 +1,12 @@
+load('image_registration_matricies/mytform_1.mat');
+t1 = mytform;
+load('image_registration_matricies/mytform_2.mat');
+t2 = mytform;
+load('image_registration_matricies/mytform_3.mat');
+t3 = mytform;
+load('image_registration_matricies/mytform_4.mat');
+t4 = mytform;
+load('image_registration_matricies/mytform_5.mat');
+t5 = mytform;
+
+t_final = (t1.T + t2.T + t3.T + t4.T + t5.t

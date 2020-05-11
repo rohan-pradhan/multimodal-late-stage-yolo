@@ -234,6 +234,11 @@ class KAIST:
             f.write("person\n")
             f.write("people\n")
             f.write("cyclist")
+  '''
+  TODO:
+   - FIX DATA FILE CREATION. IT IS CURRENTLY PUTTING THE TRAIN / TEST DIR PATH. NEEDS TO GO TO TRAIN / TEST TEXT FILE.
+
+  '''
 
     def create_data_files(self):
         self.visible_data_file_path = os.path.join(self.data_dir, "kaist_visible.data")
@@ -272,7 +277,7 @@ class KAIST:
 
 
 
-kaist = KAIST("/Users/rohanpradhan/Documents/Thesis/KAIST_Thermal_Dataset")
+kaist = KAIST("D:/KAIST_Dataset")
 kaist.run_util()
 
 
