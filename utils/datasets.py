@@ -159,8 +159,18 @@ class LoadMultimodalImagesAndLabels(Dataset):
         self.img_size = img_size
 
         # Define labels
-        self.label_files = [x.replace('lwir_all', '').replace("lwir_fog",'').replace("lwir", '').replace('images', 'labels_f').replace(os.path.splitext(x)[-1], '.txt')
+        #self.label_files = [x.replace('lwir_all', '').replace("lwir_fog",'').replace("lwir", '').replace('images', 'labels_f').replace(os.path.splitext(x)[-1], '.txt')
+        #                   for x in self.thermal_files]
+
+        #self.label_files = [x.replace('lwir_all', '').replace("lwir_fog",'').replace("lwir", '').replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt')
+        #                  for x in self.thermal_files]
+
+        self.label_files = [x.replace("lwir", '').replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt')
                             for x in self.thermal_files]
+
+
+        #self.label_files = [x.replace('lwir_gating', '').replace('images', 'labels_gating').replace(os.path.splitext(x)[-1], '.txt')
+        #                    for x in self.thermal_files]
 
         self.thermal_images = [None] * n
         self.vision_images = [None] * n

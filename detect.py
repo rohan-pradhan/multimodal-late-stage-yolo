@@ -170,4 +170,5 @@ if __name__ == '__main__':
     with torch.no_grad():
         detect()
 
-    # python detect.py --cfg cfg/yolov3-kaist-visible.cfg --data D:/KAIST_Dataset/data/kaist_visible.data   --output D:/output --source  D:/KAIST_Dataset/test/images/visible --weights weights/best.pt
+    #python detect.py --cfg cfg/yolov3-kaist-thermal.cfg --data D:/KAIST_Dataset/data/kaist_thermal.data   --output D:/output_testa --source  D:/KAIST_Dataset_FOG/val/images/lwir --weights D:/Thesis/saved_models/yolov3/KAIST_pedestrian/lwir/backup150.pt
+    #python detect.py --cfg cfg/yolov3-kaist-visible.cfg --data D:/KAIST_Dataset/data/kaist_visible.data   --output D:/output_testa --source  D:/KAIST_Dataset_FOG/test/images/visible/92379.jpg --weights D:/Thesis/saved_models/yolov3/KAIST_pedestrian/visible/best.pt

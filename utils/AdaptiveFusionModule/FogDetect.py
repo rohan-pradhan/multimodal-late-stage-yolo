@@ -14,6 +14,7 @@ class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
         resnet18 = models.resnet18(pretrained=True)
+        
         modules = list(resnet18.children())[:-1]
         self.feature_extractor = nn.Sequential(*modules)
         #self.fc1 = nn.Linear(512, 256)

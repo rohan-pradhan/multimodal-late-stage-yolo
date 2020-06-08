@@ -221,9 +221,9 @@ def train(opt):
             output = [GraphClique.fusion_graph(np_thermal_pred, np_vision_pred, thermal_val, vision_val)]
 
             #print (output, targets)
-            loss = custom_reward(output, targets)
+            active_loss = custom_reward(output, targets)
            #print (loss)
-            ratio_dict[index] = loss
+            ratio_dict[index] = active_loss
             #print (loss)
 
         if np.max(ratio_dict) == 0:
@@ -234,21 +234,6 @@ def train(opt):
             best_vision_val = 1 - best_thermal_val
 
 
-       # print (best_thermal_val, best_vision_val)
-
-
-
-
-
-        #print (np_thermal_pred)
-
-
-        criterion = torch.nn.MSELoss()
-
-        target = torch.Tensor([[best_thermal_val, best_vision_val]]).cuda().float()
-        loss = criterion(gating_output, target )
-        loss.backward()
-        optimizer.step()
 
     torch.save(GatingNet.state_dict(), "GatingNet.pt")
     print(counter)

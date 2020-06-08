@@ -291,7 +291,7 @@ def test(dt_path,
     counter = 0
     for batch_i, (img_thermal, img_vision, targets, thermal_path, vision_path, shapes) in enumerate(tqdm.tqdm(dataloader)):
 
-        img_thermal = img_thermal.to(device).float() / 255.0
+        img_thermal = iAmg_thermal.to(device).float() / 255.0
         img_vision = img_vision.float() / 255.0
         targets = targets.to(device)
         _, _, height, width = img_thermal.shape
