@@ -165,12 +165,40 @@ class LoadMultimodalImagesAndLabels(Dataset):
         #self.label_files = [x.replace('lwir_all', '').replace("lwir_fog",'').replace("lwir", '').replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt')
         #                  for x in self.thermal_files]
 
-        self.label_files = [x.replace("lwir", '').replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt')
-                            for x in self.thermal_files]
+        #self.label_files = [x.replace("lwir", '').replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt')
+        #                    for x in self.thermal_files]
 
+        #FLIR Gating
+        #self.label_files = [x.replace("lwir_gating", 'labels_gating').replace(os.path.splitext(x)[-1], '.txt')
+        #                    for x in self.thermal_files]
+
+        #FLIR Clean
+        #self.label_files = [x.replace("thermal_8_bit_adjusted", 'yolo_labels').replace(os.path.splitext(x)[-1], '.txt')
+        #                    for x in self.thermal_files]
+
+        #FLIR BLUR - LWIR Light
+        #self.label_files = [x.replace("lwir_blur_light", 'yolo_labels').replace(os.path.splitext(x)[-1], '.txt')
+        #                    for x in self.thermal_files]
+
+        # FLIR BLUR - LWIR Medium
+        #self.label_files = [x.replace("lwir_blur_medium", 'yolo_labels').replace(os.path.splitext(x)[-1], '.txt')
+        #                    for x in self.thermal_files]
+
+        # FLIR BLUR - LWIR High
+        #self.label_files = [x.replace("lwir_blur_high", 'yolo_labels').replace(os.path.splitext(x)[-1], '.txt')
+        #                    for x in self.thermal_files]
+
+        # FLIR DROPOUT - LWIR
+        #self.label_files = [x.replace("lwir_dropout", 'yolo_labels').replace(os.path.splitext(x)[-1], '.txt')
+        #                    for x in self.thermal_files]
+
+        #self.label_files = [x.replace("lwir_gating_95", 'labels_gating_95').replace(os.path.splitext(x)[-1], '.txt')
+        #                    for x in self.thermal_files]
 
         #self.label_files = [x.replace('lwir_gating', '').replace('images', 'labels_gating').replace(os.path.splitext(x)[-1], '.txt')
         #                    for x in self.thermal_files]
+
+
 
         self.thermal_images = [None] * n
         self.vision_images = [None] * n
@@ -542,8 +570,8 @@ class LoadStreams:  # multiple IP or RTSP cameras
 
 
 class LoadImagesAndLabels(Dataset):  # for training/testing
-    def __init__(self, path, img_size=416, batch_size=16, augment=False, hyp=None, rect=False, image_weights=False,
-                 cache_labels=False, cache_images=False):
+    def __init__(self, path, img_size=416, batch_size=16, augment=False, hsv_augmentation = True, hyp=None, rect=False, image_weights=False,
+                 cache_labels=False, cache_images=False, xyxy_format=False):
         path = str(Path(path))  # os-agnostic
         with open(path, 'r') as f:
             self.img_files = [x.replace('/', os.sep) for x in f.read().splitlines()  # os-agnostic
@@ -555,18 +583,27 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         
         nb = bi[-1] + 1  # number of batches
         assert n > 0, 'No images found in %s' % path
-
+        self.xyxy_format =  xyxy_format
         self.n = n
         self.batch = bi  # batch index of image
         self.img_size = img_size
         self.augment = augment
+        self.hsv_augmentation = hsv_augmentation
         self.hyp = hyp
         self.image_weights = image_weights
         self.rect = False if image_weights else rect
 
         # Define labels - for KAIST visible
-        self.label_files = [x.replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt').replace('fused','')
-                            for x in self.img_files]
+        self.label_files = [x.replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt').replace('visible','')
+                          for x in self.img_files]
+
+        # Define Labels - for FLIR Visible Dataset
+        #self.label_files = [x.replace('dirty_95', 'labels_gating_95').replace(os.path.splitext(x)[-1], '.txt').replace('fused','')
+         #                   for x in self.img_files]
+
+        # Define Labels - for FLIR LWIR Dataset
+        #self.label_files = [x.replace('thermal_8_bit_adjusted', 'yolo_labels').replace(os.path.splitext(x)[-1], '.txt').replace('fused','')
+        #                    for x in self.img_files]
 
         # Rectangular Training  https://github.com/ultralytics/yolov3/issues/232
         if self.rect:
@@ -696,7 +733,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
         img_path = self.img_files[index]
         label_path = self.label_files[index]
-
         hyp = self.hyp
         mosaic = True and self.augment  # load 4 images at a time into a mosaic (only during training)
         if mosaic:
@@ -723,8 +759,10 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                         x = np.array([x.split() for x in f.read().splitlines()], dtype=np.float32)
 
                 if x.size > 0:
+
                     # Normalized xywh to pixel xyxy format
                     labels = x.copy()
+
                     labels[:, 1] = ratio[0] * w * (x[:, 1] - x[:, 3] / 2) + pad[0]  # pad width
                     labels[:, 2] = ratio[1] * h * (x[:, 2] - x[:, 4] / 2) + pad[1]  # pad height
                     labels[:, 3] = ratio[0] * w * (x[:, 1] + x[:, 3] / 2) + pad[0]
@@ -740,14 +778,15 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                                             shear=hyp['shear'])
 
             # Augment colorspace
-            augment_hsv(img, hgain=hyp['hsv_h'], sgain=hyp['hsv_s'], vgain=hyp['hsv_v'])
+            if self.hsv_augmentation:
+                augment_hsv(img, hgain=hyp['hsv_h'], sgain=hyp['hsv_s'], vgain=hyp['hsv_v'])
 
             # Apply cutouts
             # if random.random() < 0.9:
             #     labels = cutout(img, labels)
 
         nL = len(labels)  # number of labels
-        if nL:
+        if nL and not self.xyxy_format:
             # convert xyxy to xywh
             labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])
 
@@ -814,8 +853,13 @@ class LoadFourChannelImagesandLabels(Dataset):  # for training/testing
         self.rect = False if image_weights else rect
 
         # Define labels - for KAIST visible
-        self.label_files = [x.replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt').replace('visible', '')
+        #self.label_files = [x.replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt').replace('visible', '')
+        #                    for x in self.img_files]
+
+        # Define labels - for FLIR fused
+        self.label_files = [x.replace('fused_clean', 'yolo_labels').replace(os.path.splitext(x)[-1], '.txt').replace('visible', '')
                             for x in self.img_files]
+
 
         # Rectangular Training  https://github.com/ultralytics/yolov3/issues/232
         # Rectangular Training  https://github.com/ultralytics/yolov3/issues/232
@@ -906,7 +950,7 @@ class LoadFourChannelImagesandLabels(Dataset):  # for training/testing
                 pbar.desc = 'Caching images (%.1fGB)' % (gb / 1E9)
 
         # Detect corrupted images https://medium.com/joelthchao/programmatically-detect-corrupted-image-8c1b2006c3d3
-        detect_corrupted_images = False
+        detect_corrupted_images = True
         if detect_corrupted_images:
             from skimage import io  # conda install -c conda-forge scikit-image
             for file in tqdm(self.img_files, desc='Detecting corrupted images'):
@@ -1029,7 +1073,7 @@ def load_image(self, index):
     img = self.imgs[index]
     if img is None:
         img_path = self.img_files[index]
-        img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)  # BGR
+        img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)  # BGR #cv2.IMREAD_UNCHANGED if doing 4 channel training
         assert img is not None, 'Image Not Found ' + img_path
         r = self.img_size / max(img.shape)  # resize image to img_size
         if self.augment and (r != 1):  # always resize down, only resize up if training with augmentation
@@ -1076,6 +1120,7 @@ def load_mosaic(self, index):
     for i, index in enumerate(indices):
         # Load image
         img = load_image(self, index)
+
         h, w, _ = img.shape
 
         # place img in img4

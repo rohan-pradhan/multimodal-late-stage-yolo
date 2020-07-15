@@ -286,16 +286,20 @@ def train(opt):
     column_names = ["visible_filename", "lwir_filename", "label"]
 
     dataframe = pd.DataFrame(columns=column_names)
+    thermal_out = opt.thermal_out
+    vision_out = opt.vision_out
+    thermal_source = opt.thermal_source
+    vision_source = opt.vision_source
+    thermal_weights = opt.thermal_weights
+    vision_weights = opt.vision_weights
+    half = opt.half
+    view_img = opt.view_img
+
+
 
     img_size = (416, 416)  # (320, 192) or (416, 256) or (608, 352) for (height, width)
-    thermal_out, vision_out, thermal_source, vision_source, thermal_weights, vision_weights, half, view_img = opt.thermal_out, \
-                                                                                                              opt.vision_out, \
-                                                                                                              opt.thermal_source, \
-                                                                                                              opt.vision_source, \
-                                                                                                              opt.thermal_weights, \
-                                                                                                              opt.vision_weights, \
-                                                                                                              opt.half, \
-                                                                                                              opt.view_img
+
+
 
     # Initialize
     device = torch_utils.select_device(device='cpu' if ONNX_EXPORT else opt.device)
@@ -492,13 +496,14 @@ def train(opt):
 
             target = torch.Tensor([[best_vision_val]]).cuda().float()
 
-
+            #print (temp_counter)
             if temp_counter % 1000 == 0:
+                print ("Saving data")
+                print (len(dataframe))
                 dataframe = dataframe.sample(frac=1)
-                # dataframe = dataframe[:100]
                 dataframe = dataframe.reset_index(drop=True)
 
-                dataframe.to_pickle("train_dataset.pkl")
+                dataframe.to_pickle("train_FLIR_Gating.pkl")
 
 
 
@@ -506,7 +511,7 @@ def train(opt):
                 # dataframe = dataframe[:100]
         dataframe = dataframe.reset_index(drop=True)
 
-        dataframe.to_pickle("train_dataset.pkl")
+        dataframe.to_pickle("train_FLIR_Gating.pkl")
 
 
 if __name__ == '__main__':
@@ -548,3 +553,4 @@ if __name__ == '__main__':
 
     # python test_multimodal.py --vision_source D:/FLIR/val/RGB_adjusted --thermal_source D:/FLIR/val/thermal_8_bit_adjusted
 #python ./debug_graph.py --vision_source D:/KAIST_Dataset_FOG/train/images/visible_gating --thermal_source D:/KAIST_Dataset_FOG/train/images/lwir_gating --thermal_cfg cfg/yolov3-kaist-thermal.cfg --vision_cfg cfg/yolov3-kaist-visible.cfg --thermal_data D:/KAIST_Dataset_FOG/data/kaist_thermal.data --vision_data D:/KAIST_Dataset_FOG/data/kaist_visible.data --thermal_weights D:/Thesis/saved_models/yolov3/KAIST_pedestrian/lwir/best.pt --vision_weights D:/Thesis/saved_models/yolov3/KAIST_pedestrian/visible_not_trained_with_fog/best.pt
+#python ./debug_graph.py --vision_source D:/FLIR/train/visible_gating --thermal_source D:/FLIR/train/lwir_gating --thermal_cfg cfg/yolov3-FLIR-lwir.cfg --vision_cfg cfg/yolov3-FLIR-visible.cfg --thermal_data D:/FLIR/data/train_lwir.data --vision_data D:/FLIR/data/train_visible.data --thermal_weights D:/FLIR/saved_models/lwir_sgd/last.pt --vision_weights D:/FLIR/saved_models/visible_sgd/last.pt

@@ -7,7 +7,7 @@ import tqdm
 
 transform = transforms.Compose([transforms.Resize((224, 224)), transforms.ToTensor()])
 
-dataset = dataset.AdaptiveFusionGatingDataset("train_dataset.pkl", visible_transform=transform, lwir_transform=transform)
+dataset = dataset.AdaptiveFusionGatingDataset("train_FLIR_Gating.pkl", visible_transform=transform, lwir_transform=transform)
 dataloader = DataLoader(dataset, shuffle=True ,pin_memory=True, batch_size=32)
 
 
@@ -51,6 +51,6 @@ for epoch in range(10):  # loop over the dataset multiple times
         #     running_loss = 0.0
     print("Epoch loss: ", epoch + 1, epoch_loss / len(dataloader))
     print("Validation accuracy...")
-    torch.save(GatingNet.state_dict(), "GatingNet4.pt")
+    torch.save(GatingNet.state_dict(), "FLIR_Gating.pt")
 
 

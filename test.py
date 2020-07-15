@@ -49,7 +49,7 @@ def test(cfg,
     # Dataloader
     if dataloader is None:
        # dataset = LoadImagesAndLabels(test_path, img_size, batch_size, rect=False)
-        dataset = LoadFourChannelImagesandLabels(test_path, img_size, batch_size, rect=False)
+        dataset = LoadImagesAndLabels(test_path, img_size, batch_size, rect=False)
         batch_size = min(batch_size, len(dataset))
         dataloader = DataLoader(dataset,
                                 batch_size=batch_size,

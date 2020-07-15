@@ -172,3 +172,4 @@ if __name__ == '__main__':
 
     #python detect.py --cfg cfg/yolov3-kaist-thermal.cfg --data D:/KAIST_Dataset/data/kaist_thermal.data   --output D:/output_testa --source  D:/KAIST_Dataset_FOG/val/images/lwir --weights D:/Thesis/saved_models/yolov3/KAIST_pedestrian/lwir/backup150.pt
     #python detect.py --cfg cfg/yolov3-kaist-visible.cfg --data D:/KAIST_Dataset/data/kaist_visible.data   --output D:/output_testa --source  D:/KAIST_Dataset_FOG/test/images/visible/92379.jpg --weights D:/Thesis/saved_models/yolov3/KAIST_pedestrian/visible/best.pt
+    #python detect.py --cfg cfg/yolov3-FLIR-visible.cfg --data D:/FLIR/data/flir_visible.data   --output output_testa --source  C:/Users/Rohan/Desktop/test --weights D:/FLIR/saved_models/visible_sgd/best.pt

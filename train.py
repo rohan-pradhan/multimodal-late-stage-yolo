@@ -28,17 +28,17 @@ hyp = {'giou': 3.54,  # giou loss gain
        'obj': 64.3,  # obj loss gain (*=img_size/416 if img_size != 416)
        'obj_pw': 1.0,  # obj BCELoss positive_weight
        'iou_t': 0.225,  # iou training threshold
-       'lr0': 0.00579,  # initial learning rate (SGD=1E-3, Adam=9E-5)
+       'lr0': 0.001,  # initial learning rate (SGD=1E-3, Adam=9E-5)
        'lrf': -4.,  # final LambdaLR learning rate = lr0 * (10 ** lrf)
        'momentum': 0.937,  # SGD momentum
        'weight_decay': 0.000484,  # optimizer weight decay
        'fl_gamma': 0.5,  # focal loss gamma
-       #'hsv_h': 0.0138,  # image HSV-Hue augmentation (fraction)
-       #'hsv_s': 0.678,  # image HSV-Saturation augmentation (fraction)
-       #'hsv_v': 0.36,  # image HSV-Value augmentation (fraction)
-       'hsv_h': 0.0,  # image HSV-Hue augmentation (fraction)
-       'hsv_s': 0.0,  # image HSV-Saturation augmentation (fraction)
-       'hsv_v': 0.0,  # image HSV-Value augmentation (fraction)
+       'hsv_h': 0.0138,  # image HSV-Hue augmentation (fraction)
+       'hsv_s': 0.678,  # image HSV-Saturation augmentation (fraction)
+       'hsv_v': 0.36,  # image HSV-Value augmentation (fraction)
+       #'hsv_h': 0.0,  # image HSV-Hue augmentation (fraction)
+       #'hsv_s': 0.0,  # image HSV-Saturation augmentation (fraction)
+       #'hsv_v': 0.0,  # image HSV-Value augmentation (fraction)
        'degrees': 1.98,  # image rotation (+/- deg)
        'translate': 0.05,  # image translation (+/- fraction)
        'scale': 0.05,  # image scale (+/- gain)
@@ -194,20 +194,21 @@ def train():
     # Dataset
     dataset = LoadImagesAndLabels(train_path, img_size, batch_size,
                                   augment=True,
+                                  hsv_augmentation = False,
                                   hyp=hyp,  # augmentation hyperparameters
                                   rect=opt.rect,  # rectangular training
                                   image_weights=opt.img_weights,
                                   cache_labels=epochs > 10,
                                   cache_images=opt.cache_images and not opt.prebias)
 
-    # dataset = LoadFourChannelImagesandLabels(train_path, img_size, batch_size,
-    #                               augment=True,
-    #                               hyp=hyp,  # augmentation hyperparameters
-    #                               rect=opt.rect,  # rectangular training
-    #                               image_weights=opt.img_weights,
-    #                               cache_labels=epochs > 10,
-    #                               cache_images=opt.cache_images and not opt.prebias)
-
+    '''dataset = LoadFourChannelImagesandLabels(train_path, img_size, batch_size,
+                                   augment=True,
+                                   hyp=hyp,  # augmentation hyperparameters
+                                   rect=opt.rect,  # rectangular training
+                                   image_weights=opt.img_weights,
+                                   cache_labels=epochs > 10,
+                                   cache_images=opt.cache_images and not opt.prebias)
+    '''
     # Dataloader
     batch_size = min(batch_size, len(dataset))
     nw = min([os.cpu_count(), batch_size if batch_size > 1 else 0, 8])# number of workers
@@ -239,16 +240,16 @@ def train():
                                                  num_workers=nw,
                                                  pin_memory=True,
                                                  collate_fn=dataset.collate_fn)
-
-        # testloader = torch.utils.data.DataLoader(LoadFourChannelImagesandLabels(test_path, img_size, batch_size, hyp=hyp,
-        #                                                              rect=True,
-        #                                                              cache_labels=True,
-        #                                                              cache_images=opt.cache_images),
-        #                                          batch_size=batch_size,
-        #                                          num_workers=nw,
-        #                                          pin_memory=True,
-        #                                          collate_fn=dataset.collate_fn)
-
+        '''
+         testloader = torch.utils.data.DataLoader(LoadFourChannelImagesandLabels(test_path, img_size, batch_size, hyp=hyp,
+                                                                      rect=True,
+                                                                      cache_labels=True,
+                                                                      cache_images=opt.cache_images),
+                                                  batch_size=batch_size,
+                                                  num_workers=nw,
+                                                  pin_memory=True,
+                                                  collate_fn=dataset.collate_fn)
+        '''
     # Start training
     nb = len(dataloader)
     model.nc = nc  # attach number of classes to model
@@ -474,6 +475,8 @@ if __name__ == '__main__':
     parser.add_argument('--adam', action='store_true', help='use adam optimizer')
     parser.add_argument('--var', type=float, help='debug variable')
     opt = parser.parse_args()
+
+    #python train.py --cfg cfg/yolov3-FLIR-visible.cfg --data D:/FLIR/data/flir_visible.data --weights ""
     opt.weights = last if opt.resume else opt.weights
     print(opt)
     device = torch_utils.select_device(opt.device, apex=mixed_precision, batch_size=opt.batch_size)

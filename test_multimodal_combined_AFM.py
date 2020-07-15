@@ -250,13 +250,13 @@ def test(dt_path,
     GatingNet = AdaptiveFusionGatingNet()
     GatingNet.eval()
     GatingNet.cuda()
-    GatingNet.load_state_dict(torch.load("./GatingNet4.pt"))
+    GatingNet.load_state_dict(torch.load("./FLIR_Gating.pt"))
 
 
 
 
 
-    dataset = LoadMultimodalImagesAndLabels(thermal_path=thermal_source, vision_path=vision_source, img_size=416)
+    dataset = LoadMultimodalImagesAndLabels(thermal_path=thermal_source, vision_path=vision_source, img_size=416, )
 
 
     dataloader = DataLoader(dataset,
@@ -428,5 +428,6 @@ if __name__ == '__main__':
 
     with torch.no_grad():
         print(test(opt.dt_path, opt.gt_path, opt.model_arch))
+        #python test_multimodal.py --vision_source D:/FLIR/val/RGB_adjusted --thermal_source D:/FLIR/val/thermal_8_bit_adjusted
         #python test_multimodal.py --vision_source D:/FLIR/val/RGB_adjusted --thermal_source D:/FLIR/val/thermal_8_bit_adjusted
 
